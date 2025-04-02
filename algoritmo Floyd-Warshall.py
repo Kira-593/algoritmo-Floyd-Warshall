@@ -1,82 +1,137 @@
+try:
+    import networkx as nx
+    import matplotlib.pyplot as plt
+except ImportError:
+    print("Error: Necesitas instalar las dependencias:")
+    print("pip install networkx matplotlib")
+    exit()
+
+# ----------------------------------------------------------
+# Algoritmo de Floyd-Warshall
+# ----------------------------------------------------------
 def floyd_warshall(graph):
-    """
-    Encuentra las distancias mínimas entre todos los pares de nodos en un grafo.
-    
-    Args:
-        graph: Matriz de adyacencia (lista de listas). 
-               graph[i][j] = peso de la arista (i, j).
-               Use float('inf') para representar "no conexión".
-               
-    Returns:
-        Matriz de distancias mínimas y detección de ciclos negativos.
-    """
     n = len(graph)
-    
-    # Inicializar matriz de distancias
     dist = [row[:] for row in graph]
     
-    # Actualizar distancias usando todos los nodos intermedios
     for k in range(n):
         for i in range(n):
             for j in range(n):
-                dist[i][j] = min(dist[i][j], dist[i][k] + dist[k][j])
+                if dist[i][j] > dist[i][k] + dist[k][j]:
+                    dist[i][j] = dist[i][k] + dist[k][j]
     
-    # Detectar ciclos negativos
-    has_negative_cycle = any(dist[i][i] < 0 for i in range(n))
+    return dist, any(dist[i][i] < 0 for i in range(n))
+
+# ----------------------------------------------------------
+# Funciones de visualización
+# ----------------------------------------------------------
+def print_graph(matrix, title):
+    n = len(matrix)
+    nodos = [chr(65 + i) for i in range(n)]
     
-    return dist, has_negative_cycle
+    print(f"\n{title}:")
+    print(f"    {'   '.join(nodos)}")
+    for i in range(n):
+        fila = [f"{nodos[i]}"] + ['INF' if x == float('inf') else f"{x:3}" for x in matrix[i]]
+        print(' '.join(fila))
 
-def print_matrix(matrix):
-    """Imprime una matriz de forma legible, reemplazando inf por 'INF'"""
-    for row in matrix:
-        print(' '.join(['INF' if x == float('inf') else f"{x:3}" for x in row]))
+def draw_graph(graph):
+    G = nx.DiGraph()
+    n = len(graph)
+    nodos = [chr(65 + i) for i in range(n)]
+    
+    # Añadir aristas
+    for i in range(n):
+        for j in range(n):
+            peso = graph[i][j]
+            if i != j and peso != float('inf'):
+                G.add_edge(nodos[i], nodos[j], weight=peso)
+    
+    # Configurar diseño
+    pos = nx.spring_layout(G, seed=42)
+    edge_labels = {(u, v): d['weight'] for u, v, d in G.edges(data=True)}
+    
+    plt.figure(figsize=(10, 8))
+    nx.draw(G, pos, with_labels=True, node_size=1500, node_color='red',
+            font_size=14, arrows=True, arrowsize=25, connectionstyle='arc3,rad=0.1')
+    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color='darkred')
+    plt.title("Grafo Ingresado por el Usuario", fontsize=16)
+    plt.show()
 
-# Ejemplo 1: Grafo sin ciclos negativos
-graph1 = [
-    [0, 5, float('inf'), 10],
-    [float('inf'), 0, 3, float('inf')],
-    [float('inf'), float('inf'), 0, 1],
-    [float('inf'), float('inf'), float('inf'), 0]
-]
+# ----------------------------------------------------------
+# Entrada de usuario
+# ----------------------------------------------------------
+def input_matrix():
+    while True:
+        try:
+            n = int(input("\n► Ingrese el número de nodos: "))
+            if n < 1:
+                print("¡Debe haber al menos 1 nodo!")
+                continue
+            break
+        except ValueError:
+            print("¡Entrada inválida! Ingrese un número entero.")
 
-print("Grafo original:")
-print_matrix(graph1)
+    print("\n► Instrucciones:")
+    print(" - Diagonal principal: ingrese 0")
+    print(" - Sin conexión: ingrese 9999")
+    print(" - Pesos negativos permitidos")
+    print(" - Ejemplo para 3 nodos: 0 5 9999\n")
 
-result1, negative_cycle1 = floyd_warshall(graph1)
+    graph = []
+    for i in range(n):
+        nodo_actual = chr(65 + i)
+        while True:
+            try:
+                entrada = input(f"Ingrese fila para nodo {nodo_actual} ({n} valores separados por espacios): ")
+                fila = []
+                for x in entrada.split():
+                    if x == '9999':
+                        fila.append(float('inf'))
+                    else:
+                        valor = float(x)
+                        fila.append(valor)
+                
+                if len(fila) != n:
+                    print(f"¡Error! Necesita {n} valores")
+                    continue
+                
+                if fila[i] != 0:
+                    print(f"¡El valor {nodo_actual}→{nodo_actual} debe ser 0!")
+                    continue
+                
+                graph.append(fila)
+                break
+                
+            except ValueError:
+                print("¡Entrada inválida! Use números o 9999 para infinito")
+    
+    return graph
 
-print("\nDistancias mínimas:")
-print_matrix(result1)
-print(f"¿Tiene ciclos negativos? {'Sí' if negative_cycle1 else 'No'}")
-
-# Ejemplo 2: Grafo con pesos negativos (sin ciclos negativos)
-graph2 = [
-    [0, 4, float('inf'), float('inf')],
-    [float('inf'), 0, -2, float('inf')],
-    [float('inf'), float('inf'), 0, 3],
-    [1, float('inf'), float('inf'), 0]
-]
-
-print("\n\nGrafo con pesos negativos:")
-print_matrix(graph2)
-
-result2, negative_cycle2 = floyd_warshall(graph2)
-
-print("\nDistancias mínimas:")
-print_matrix(result2)
-print(f"¿Tiene ciclos negativos? {'Sí' if negative_cycle2 else 'No'}")
-
-# Ejemplo 3: Grafo con ciclo negativo
-graph3 = [
-    [0, 1, float('inf')],
-    [float('inf'), 0, -5],
-    [2, float('inf'), 0]
-]
-
-print("\n\nGrafo con ciclo negativo:")
-print_matrix(graph3)
-
-result3, negative_cycle3 = floyd_warshall(graph3)
-
-print("\nDistancias mínimas:")
-print_matrix(result3)
-print(f"¿Tiene ciclos negativos? {'Sí' if negative_cycle3 else 'No'}")
+# ----------------------------------------------------------
+# Ejecución principal
+# ----------------------------------------------------------
+if __name__ == "__main__":
+    print("\n" + "="*60)
+    print(" "*10 + "ALGORITMO DE FLOYD-WARSHALL - VERSIÓN COMPLETA")
+    print("="*60)
+    
+    # Obtener y mostrar grafo
+    matriz = input_matrix()
+    print_graph(matriz, "Matriz Original")
+    draw_graph(matriz)
+    
+    # Calcular resultados
+    distancias, ciclos_neg = floyd_warshall(matriz)
+    print_graph(distancias, "Matriz de Distancias Mínimas")
+    print(f"\n► Ciclos negativos detectados: {'SÍ' if ciclos_neg else 'NO'}")
+    
+    # Mostrar rutas
+    print("\n" + "-"*60)
+    print("Rutas más cortas entre todos los pares:")
+    nodos = [chr(65 + i) for i in range(len(matriz))]
+    for i in range(len(matriz)):
+        for j in range(len(matriz)):
+            if i != j:
+                distancia = distancias[i][j]
+                valor = 'INF' if distancia == float('inf') else f"{distancia:.2f}"
+                print(f" ▷ {nodos[i]} → {nodos[j]}: {valor}")
