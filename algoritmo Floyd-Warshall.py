@@ -1,3 +1,8 @@
+import multiprocessing as mp
+import ctypes
+import numpy as np
+from itertools import repeat
+
 try:
     import networkx as nx
     import matplotlib.pyplot as plt
@@ -9,18 +14,33 @@ except ImportError:
 # ----------------------------------------------------------
 # Algoritmo de Floyd-Warshall
 # ----------------------------------------------------------
-def floyd_warshall(graph):
+def floyd_warshall_parallel(graph):
     n = len(graph)
-    dist = [row[:] for row in graph]
+    
+    # Array compartido como variable global
+    global shared_array
+    shared_array = mp.RawArray(ctypes.c_double, n*n)
+    dist = np.frombuffer(shared_array, dtype=ctypes.c_double).reshape(n, n)
+    np.copyto(dist, np.array(graph))
     
     for k in range(n):
-        for i in range(n):
-            for j in range(n):
-                if dist[i][j] > dist[i][k] + dist[k][j]:
-                    dist[i][j] = dist[i][k] + dist[k][j]
+        with mp.Pool(initializer=init_worker, initargs=(shared_array, n)) as pool:
+            pool.starmap(update_dist, zip(range(n), repeat(k)), chunksize=10)
     
-    return dist, any(dist[i][i] < 0 for i in range(n))
+    has_negative_cycle = any(dist[i][i] < 0 for i in range(n))
+    return dist.tolist(), has_negative_cycle
 
+def init_worker(shared_arr, size):
+    """Inicializa el array compartido en los workers"""
+    global worker_array, worker_size
+    worker_array = shared_arr
+    worker_size = size
+
+def update_dist(i, k):
+    """Accede al array compartido desde el worker"""
+    dist = np.frombuffer(worker_array, dtype=ctypes.c_double).reshape(worker_size, worker_size)
+    for j in range(worker_size):
+        dist[i][j] = min(dist[i][j], dist[i][k] + dist[k][j])
 # ----------------------------------------------------------
 # Funciones de visualización
 # ----------------------------------------------------------
@@ -112,16 +132,19 @@ def input_matrix():
 # ----------------------------------------------------------
 if __name__ == "__main__":
     print("\n" + "="*60)
-    print(" "*10 + "ALGORITMO DE FLOYD-WARSHALL - VERSIÓN COMPLETA")
+    print(" "*10 + "FLOYD-WARSHALL PARALELO - MULTIPROCESAMIENTO")
     print("="*60)
     
-    # Obtener y mostrar grafo
     matriz = input_matrix()
     print_graph(matriz, "Matriz Original")
     draw_graph(matriz)
     
-    # Calcular resultados
-    distancias, ciclos_neg = floyd_warshall(matriz)
+    matriz_np = np.where(np.isinf(matriz), 1e99, matriz)
+    
+    distancias, ciclos_neg = floyd_warshall_parallel(matriz_np)
+    
+    distancias = [[x if x < 1e90 else float('inf') for x in row] for row in distancias]
+    
     print_graph(distancias, "Matriz de Distancias Mínimas")
     print(f"\n► Ciclos negativos detectados: {'SÍ' if ciclos_neg else 'NO'}")
     
